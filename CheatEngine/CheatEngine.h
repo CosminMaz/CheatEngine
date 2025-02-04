@@ -6,7 +6,9 @@
 #include <Windows.h>
 #include <TlHelp32.h>
 #include <iostream>
-
-
+#include <vector>
+#include <cstring>
+#include <string>
+#include <memory>
 
 // TODO: Reference additional headers your program requires here.
