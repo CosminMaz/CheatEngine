@@ -26,89 +26,9 @@ DWORD FindPidByName(const char* name) {
     return 0;
 }
 
-void ScanVirtualPages(HANDLE handleProcess) {
-    SYSTEM_INFO sSysInfo = {};
-    GetSystemInfo(&sSysInfo);
-
-    MEMORY_BASIC_INFORMATION memInfo;
-
-    void* currentScanAdress = 0;
-
-    while (true) {
-        SIZE_T bytes = VirtualQueryEx(handleProcess, currentScanAdress, &memInfo, sizeof(MEMORY_BASIC_INFORMATION));
-
-        if (!bytes) {
-            return;
-        }
-
-        currentScanAdress = (char*)memInfo.BaseAddress + memInfo.RegionSize;
-
-        if (memInfo.State == MEM_COMMIT) {
-            if (memInfo.Protect == PAGE_READWRITE) {
-                std::cout << "Found READWRITE page at base address: " << memInfo.BaseAddress << " Size: " << memInfo.RegionSize
-                    << " = pages count: " << memInfo.RegionSize / sSysInfo.dwPageSize << std::endl;
-            }
-        }
-
-    }
-}
-
-void ScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vector<void*> &test) {
+void ScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vector<void*>& test, bool& first_find) {
     int addresses_found = 0;
-    SYSTEM_INFO sSysInfo = {};
-    GetSystemInfo(&sSysInfo);
-
-    MEMORY_BASIC_INFORMATION memInfo;
-    void* currentScanAddress = nullptr;
-    while (true) {
-        SIZE_T bytes = VirtualQueryEx(handleProcess, currentScanAddress, &memInfo, sizeof(MEMORY_BASIC_INFORMATION));
-
-        if (!bytes) {
-            std::cout << "Address with value " << targetValue << " found: " << addresses_found << std::endl;
-            return;
-        }
-
-        currentScanAddress = (char*)memInfo.BaseAddress + memInfo.RegionSize;
-
-        if (memInfo.State == MEM_COMMIT && (memInfo.Protect & PAGE_READWRITE || memInfo.Protect & PAGE_READONLY)) {
-            SIZE_T regionSize = memInfo.RegionSize;
-            //std::shared_ptr<char> shared_buffer = std::make_shared<char>(regionSize);
-            SIZE_T bytesRead;
-            char* buffer = new char[regionSize];
-            if (ReadProcessMemory(handleProcess, memInfo.BaseAddress, buffer, regionSize, &bytesRead)) {
-                for (SIZE_T i = 0; i < bytesRead - sizeof(int); ++i) {
-                    int* intPtr = (int*)(buffer + i);
-                    if (*intPtr == targetValue) {
-                        //std::cout << "Found value at address: " << (void*)((char*)memInfo.BaseAddress + i) << std::endl;
-                        //std::cout << *(int*)(buffer + i) << std::endl;
-                        test.push_back((void*)((char*)memInfo.BaseAddress + i));
-                        ++addresses_found;
-                    }
-                }
-            }
-            
-            /*
-            char* buffer = new char[regionSize];
-            SIZE_T bytesRead;
-            if (ReadProcessMemory(handleProcess, memInfo.BaseAddress, buffer, regionSize, &bytesRead)) {
-                for (SIZE_T i = 0; i < bytesRead - sizeof(int); i++) {
-                    int* intPtr = (int*)(buffer + i);
-                    if (*intPtr == targetValue) {
-                        std::cout << "Found value at address: " << (void*)((char*)memInfo.BaseAddress + i) << std::endl;
-                        std::cout << *(int*)(buffer + i) << std::endl;
-                        test.push_back(buffer + i);
-                    }
-                }
-            }
-            delete[] buffer;
-            */
-        }
-    }
-}
-
-void ReScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vector<void*>& test) {
     std::vector<void*> temp;
-    
     SYSTEM_INFO sSysInfo = {};
     GetSystemInfo(&sSysInfo);
 
@@ -118,9 +38,14 @@ void ReScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vect
         SIZE_T bytes = VirtualQueryEx(handleProcess, currentScanAddress, &memInfo, sizeof(MEMORY_BASIC_INFORMATION));
 
         if (!bytes) {
-            std::cout << "Address with value " << targetValue << " found: " << temp.size() << std::endl;
-            test.clear();
-            test = temp;
+            if (first_find) {
+                std::cout << "Address with value1 " << targetValue << " found: " << addresses_found << std::endl;
+                first_find = false;
+            } else {
+                std::cout << "Address with value " << targetValue << " found: " << temp.size() << std::endl;
+                test.clear();
+                test = temp;
+            }
             return;
         }
 
@@ -128,31 +53,28 @@ void ReScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vect
 
         if (memInfo.State == MEM_COMMIT && (memInfo.Protect & PAGE_READWRITE || memInfo.Protect & PAGE_READONLY)) {
             SIZE_T regionSize = memInfo.RegionSize;
-            //std::shared_ptr<char> shared_buffer = std::make_shared<char>(regionSize);
+
             SIZE_T bytesRead;
             char* buffer = new char[regionSize];
             if (ReadProcessMemory(handleProcess, memInfo.BaseAddress, buffer, regionSize, &bytesRead)) {
                 for (SIZE_T i = 0; i < bytesRead - sizeof(int); ++i) {
                     int* intPtr = (int*)(buffer + i);
-                    if (*intPtr == targetValue && (std::count(test.begin(), test.end(), (void*)((char*)memInfo.BaseAddress + i)) != 0)) {
-                        temp.push_back((void*)((char*)memInfo.BaseAddress + i));
-                       //std::cout << "Found value at address: " << (void*)((char*)memInfo.BaseAddress + i) << std::endl;
-                       //std::cout << *(int*)(buffer + i) << std::endl;
-                        /*
-                        int newData = 546;
-                        if (WriteProcessMemory(handleProcess, (void*)((char*)memInfo.BaseAddress + i), &newData, sizeof(newData), nullptr)) {
-                            std::cout << "Succesfully written the new data!" << std::endl;
+                    if (*intPtr == targetValue) {
+                        if (first_find) {
+                            test.push_back((void*)((char*)memInfo.BaseAddress + i));
+                            ++addresses_found;
+                        } else {
+                            if ((std::count(test.begin(), test.end(), (void*)((char*)memInfo.BaseAddress + i)) != 0)) {
+                                temp.push_back((void*)((char*)memInfo.BaseAddress + i));
+                            }
                         }
-                        else {
-                            std::cout << "Failed to open process" << std::endl;
-                        }
-                        */
                     }
                 }
             }
         }
     }
 }
+
 
 void WriteInMemory(const DWORD& pid, std::vector<void*>& addr) {
     int newData;
@@ -183,75 +105,58 @@ void WriteInMemory(const DWORD& pid, std::vector<void*>& addr) {
 }
 
 const char* GetProcessName() {
+    /*
     std::string input;
-    std::cout << "Enter a string: ";
     std::getline(std::cin, input);
-    const char* to_return = input.c_str();
-    return to_return;
+    const char* str = input.c_str();
+    return str;
+    */
+    static std::string input;  // Static ensures it persists after function returns
+    std::getline(std::cin, input);
+    return input.c_str();
 }
 
-void SearchValue(const DWORD &pid, std::vector<void*> &addr, const int &value) {
-    HANDLE handleProcess;
+void EngineLoop() {
+    bool first_find = true;
+    HANDLE handleProcess = nullptr;
+    int value = 0, command = 1;
+    std::vector<void*> addresses;
+    std::cout << "Enter a program to find pid: ";
+    const char* process_name = GetProcessName();
+    auto pid = FindPidByName(process_name);
+
     if (pid) {
         std::cout << "Process found with PID: " << pid << std::endl;
         handleProcess = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
         if (handleProcess) {
-            ScanVirtualPagesForValue(handleProcess, value, addr);
-            CloseHandle(handleProcess);
+            std::cout << "Process opened succesfully." << std::endl;
         } else {
             std::cerr << "Failed to open process." << std::endl;
         }
     } else {
-        std::cerr << "Process not found." << std::endl;
+        std::cerr << "Process not found" << std::endl;
     }
-}
-
-void ReSearchValue(const DWORD& pid, std::vector<void*> &addr, const int& value){
-    HANDLE handleProcess;
-    if (pid) {
-        std::cout << "Process found with PID: " << pid << std::endl;
-        handleProcess = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
-        if (handleProcess) {
-            ReScanVirtualPagesForValue(handleProcess, value, addr);
-            CloseHandle(handleProcess);
-        }
-        else {
-            std::cerr << "Failed to open process." << std::endl;
-        }
-    }
-    else {
-        std::cerr << "Process not found." << std::endl;
-    }
-}
-
-void EngineLoop() {
-    const char* process_name;
-    int value, command = 1;
-    std::vector<void*> addresses;
-    //std::cout << "Enter a program to find pid: ";
-    //process_name = GetProcessName();
-    auto pid = FindPidByName("javaw.exe");
 
     while (true) {
         std::cout << "-----------------";
-        std::cout << "Type a command:" << std::endl;
+        std::cout << "Type a command:" << std::endl;;
         std::cout << "1) Choose a value to search" << std::endl;
         std::cout << "2) Search the value in memory" << std::endl;
-        std::cout << "3) Research the value in memory" << std::endl;
-        std::cout << "4) Write memory address" << std::endl;
+        std::cout << "3) Write memory address" << std::endl;
         std::cout << "-----------------" << std::endl;
+        std::cout << "Enter command: ";
         std::cin >> command;
+        std::cout << std::endl;
         switch (command) {
         case 1:
+            std::cout << "Enter new value to search: ";
             std::cin >> value;
+            std::cout << std::endl;
             break;
         case 2:
-            SearchValue(pid, addresses, value);
+            ScanVirtualPagesForValue(handleProcess, value, addresses, first_find);
             break;
         case 3:
-            ReSearchValue(pid, addresses, value);
-            break;
-        case 4:
             WriteInMemory(pid, addresses);
             break;
         default:
@@ -263,58 +168,5 @@ void EngineLoop() {
 
 int main() {
     EngineLoop();
-    /*
-    std::vector<void *> test;
-    const int valueToFind = 5; 
-    HANDLE handleProcess;
-    auto pid = FindPidByName("testeCheatEngine.exe");
-    if (pid) {
-        std::cout << "Process found with PID: " << pid << std::endl;
-
-        handleProcess = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
-
-        if (handleProcess) {
-            
-            std::cout << "Enter memory address:\n";
-            void* address = 0;
-            std::cin >> address;
-            int data = 0;
-
-            ReadProcessMemory(handleProcess, address, &data, sizeof(data), nullptr);
-
-            std::cout << data << std::endl;
-
-            int newData = 546;
-            if (WriteProcessMemory(handleProcess, address, &newData, sizeof(newData), nullptr)) {
-                std::cout << "Succesfully written the new data!" << std::endl;
-            } else {
-                std::cout << "Failed to open process" << std::endl;
-            }
-            
-            ScanVirtualPages(handleProcess);
-            
-            ScanVirtualPagesForValue(handleProcess, 5, test);
-            CloseHandle(handleProcess);
-        } else {
-            std::cerr << "Failed to open process." << std::endl;
-        }
-    }
-    else {
-        std::cerr << "Process not found." << std::endl;
-    }
-
-    std::cout << std::endl;
-
-    for (int i = 0; i < test.size(); i++) {
-        std::cout << test[i] << std::endl;
-    }
-
-    std::cin.ignore();
-    std::cin.get();
-
-    handleProcess = OpenProcess(PROCESS_ALL_ACCESS, 0, pid);
-    ReScanVirtualPagesForValue(handleProcess, 69, test);
-    */
-
     return 0;
 }
