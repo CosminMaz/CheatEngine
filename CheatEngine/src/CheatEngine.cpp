@@ -26,7 +26,7 @@ DWORD FindPidByName(const char* name) {
     return 0;
 }
 
-void ScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vector<void*>& test, bool& first_find) {
+void ScanVirtualPagesForValue(const HANDLE &handleProcess, const int &targetValue, std::vector<void*>& test, bool& first_find) {
     int addresses_found = 0;
     std::vector<void*> temp;
     SYSTEM_INFO sSysInfo = {};
@@ -76,7 +76,7 @@ void ScanVirtualPagesForValue(HANDLE handleProcess, int targetValue, std::vector
 }
 
 
-void WriteInMemory(const DWORD& pid, std::vector<void*>& addr) {
+void WriteInMemory(const DWORD& pid, const std::vector<void*>& addr) {
     int newData;
     std::cout << "Enter new data to write in memory: ";
     std::cin >> newData;
