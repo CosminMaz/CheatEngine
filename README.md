@@ -1,2 +1,2 @@
-# memCheat
+# CheatMotor
 A copy of CheatEngine

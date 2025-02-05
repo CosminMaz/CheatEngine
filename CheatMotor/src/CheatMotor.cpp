@@ -1,4 +1,4 @@
-﻿#include "../memCheat.h"
+﻿#include "../CheatMotor.h"
 
 DWORD FindPidByName(const char* name) {
     HANDLE h;

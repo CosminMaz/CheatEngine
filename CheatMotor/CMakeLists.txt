@@ -3,10 +3,10 @@
 #
 
 # Add source to this project's executable.
-add_executable (memCheat "src/memCheat.cpp" "memCheat.h")
+add_executable (CheatMotor "src/CheatMotor.cpp" "CheatMotor.h")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET memCheat PROPERTY CXX_STANDARD 20)
+  set_property(TARGET CheatMotor PROPERTY CXX_STANDARD 20)
 endif()
 
 # TODO: Add tests and install targets if needed.
