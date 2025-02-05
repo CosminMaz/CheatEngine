@@ -105,13 +105,7 @@ void WriteInMemory(const DWORD& pid, std::vector<void*>& addr) {
 }
 
 const char* GetProcessName() {
-    /*
-    std::string input;
-    std::getline(std::cin, input);
-    const char* str = input.c_str();
-    return str;
-    */
-    static std::string input;  // Static ensures it persists after function returns
+    static std::string input;  
     std::getline(std::cin, input);
     return input.c_str();
 }
